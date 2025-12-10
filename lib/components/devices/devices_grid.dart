@@ -1,4 +1,5 @@
 import 'package:dashboard_ui/components/common/device_card.dart';
+import 'package:dashboard_ui/services/switching_api.dart';
 import 'package:flutter/material.dart';
 
 class DevicesGrid extends StatefulWidget {
@@ -9,7 +10,7 @@ class DevicesGrid extends StatefulWidget {
 }
 
 class _DevicesGridState extends State<DevicesGrid> {
-  final List<Map<String, String>> _mySmartDevices = [
+  final List<Map<String, dynamic>> _mySmartDevices = [
     {
       "name": "Smart Light",
       "iconPath": "assets/images/light-bulb.png",
@@ -31,6 +32,41 @@ class _DevicesGridState extends State<DevicesGrid> {
       "powerStatus": "OFF",
     },
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDeviceStatuses();
+  }
+
+  Future<void> _loadDeviceStatuses() async {
+    for (int i = 0; i < _mySmartDevices.length; i++) {
+      final String deviceName = _mySmartDevices[i]["name"] ?? "";
+      try {
+        final String status = await SwitchingApi.getDeviceStatus(deviceName);
+        if (mounted) {
+          setState(() {
+            _mySmartDevices[i]["powerStatus"] = status;
+          });
+        }
+      } catch (e) {
+        print("Erreur lors de la récupération du statut de $deviceName: $e");
+        // Keep the local fallback value
+      }
+    }
+  }
+
+  Future<bool> _switchDevice(String deviceName, bool turnOn) async {
+    try {
+      // Simule une requête réseau pour changer le statut du dispositif
+      final bool success = await SwitchingApi.switchDevice(deviceName, turnOn);
+
+      return success;
+    } catch (e) {
+      print("Erreur lors du changement de statut de $deviceName: $e");
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,17 +107,33 @@ class _DevicesGridState extends State<DevicesGrid> {
               return DeviceCard(
                 iconDevice: _mySmartDevices[index]["iconPath"] ?? "",
                 deviceName: _mySmartDevices[index]["name"] ?? "",
-                powerStatus: _mySmartDevices[index]["powerStatus"] ?? "",
-                onChanged: (bool value) {
-                  print(
-                    "Switch toggled for ${_mySmartDevices[index]["name"]}: $value",
-                  );
+                powerStatus: _mySmartDevices[index]["powerStatus"] ?? "OFF",
+                onChanged: (bool value) async {
+                  final String deviceName =
+                      _mySmartDevices[index]["name"] ?? "";
 
-                  setState(() {
-                    _mySmartDevices[index]["powerStatus"] = value
-                        ? "ON"
-                        : "OFF";
-                  });
+                  // Call the API to switch the device
+                  final bool success = await _switchDevice(deviceName, value);
+
+                  if (success) {
+                    // Update the local state only if the API call succeeded
+                    setState(() {
+                      _mySmartDevices[index]["powerStatus"] = value
+                          ? "ON"
+                          : "OFF";
+                    });
+                    print(
+                      "Successfully switched $deviceName to ${value ? 'ON' : 'OFF'}",
+                    );
+                  } else {
+                    print("Failed to switch $deviceName");
+                    // Optionally, show a snackbar or dialog to the user
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text("Failed to switch $deviceName")),
+                      );
+                    }
+                  }
                 },
               );
             },

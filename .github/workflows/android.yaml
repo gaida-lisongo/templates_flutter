@@ -4,9 +4,11 @@ name: Flutter Build & Deploy to APK
 # Déclenche ce workflow à chaque 'push' sur la branche 'main'
 on:
   push:
-    branches: [ main ]
+    branches: 
+      - "*"
   pull_request:
-    branches: [ main ]
+    branches: 
+      - "*"
 
 jobs:
   build:

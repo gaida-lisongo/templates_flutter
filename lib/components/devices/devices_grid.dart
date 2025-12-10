@@ -10,33 +10,34 @@ class DevicesGrid extends StatefulWidget {
 }
 
 class _DevicesGridState extends State<DevicesGrid> {
-  final List<Map<String, dynamic>> _mySmartDevices = [
-    {
-      "name": "Smart Light",
-      "iconPath": "assets/images/light-bulb.png",
-      "powerStatus": "OFF",
-    },
-    {
-      "name": "Smart AC",
-      "iconPath": "assets/images/ac.png",
-      "powerStatus": "OFF",
-    },
-    {
-      "name": "Smart TV",
-      "iconPath": "assets/images/tv.png",
-      "powerStatus": "ON",
-    },
-    {
-      "name": "Smart Fan",
-      "iconPath": "assets/images/fan.png",
-      "powerStatus": "OFF",
-    },
-  ];
+  final List<Map<String, dynamic>> _mySmartDevices = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
+
+    _fetchDevices()
+        .then((devices) {
+          _isLoading = true;
+          if (mounted) {
+            setState(() {
+              _mySmartDevices.addAll(devices);
+            });
+          }
+        })
+        .whenComplete(() => _loadDeviceStatuses());
     _loadDeviceStatuses();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchDevices() async {
+    try {
+      final devices = await SwitchingApi.getAllDevices();
+      return devices;
+    } catch (e) {
+      print("Erreur lors de la récupération des dispositifs : $e");
+      return [];
+    }
   }
 
   Future<void> _loadDeviceStatuses() async {
@@ -52,6 +53,12 @@ class _DevicesGridState extends State<DevicesGrid> {
       } catch (e) {
         print("Erreur lors de la récupération du statut de $deviceName: $e");
         // Keep the local fallback value
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       }
     }
   }
@@ -88,57 +95,71 @@ class _DevicesGridState extends State<DevicesGrid> {
         ),
 
         // J'ai retiré le Expanded ici !
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 40.0),
-          // Le GridView va maintenant calculer sa propre hauteur
-          child: GridView.builder(
-            itemCount: _mySmartDevices.length,
-            // 1. IMPORTANT : shrinkWrap permet au GridView de prendre juste la place nécessaire
-            shrinkWrap: true,
-            // 2. IMPORTANT : Empêche le GridView de scroller lui-même (c'est la page qui scrollera)
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio:
-                  1 /
-                  1.3, // Optionnel : ajuste le ratio hauteur/largeur des cartes
-            ),
-            itemBuilder: (context, index) {
-              return DeviceCard(
-                iconDevice: _mySmartDevices[index]["iconPath"] ?? "",
-                deviceName: _mySmartDevices[index]["name"] ?? "",
-                powerStatus: _mySmartDevices[index]["powerStatus"] ?? "OFF",
-                onChanged: (bool value) async {
-                  final String deviceName =
-                      _mySmartDevices[index]["name"] ?? "";
+        _isLoading
+            ? const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: CircularProgressIndicator(),
+              )
+            : Container(
+                padding: const EdgeInsets.symmetric(horizontal: 40.0),
+                // Le GridView va maintenant calculer sa propre hauteur
+                child: GridView.builder(
+                  itemCount: _mySmartDevices.length,
+                  // 1. IMPORTANT : shrinkWrap permet au GridView de prendre juste la place nécessaire
+                  shrinkWrap: true,
+                  // 2. IMPORTANT : Empêche le GridView de scroller lui-même (c'est la page qui scrollera)
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    childAspectRatio:
+                        1 /
+                        1.3, // Optionnel : ajuste le ratio hauteur/largeur des cartes
+                  ),
+                  itemBuilder: (context, index) {
+                    return DeviceCard(
+                      iconDevice: _mySmartDevices[index]["iconPath"] ?? "",
+                      deviceName: _mySmartDevices[index]["name"] ?? "",
+                      powerStatus:
+                          _mySmartDevices[index]["powerStatus"] ?? "OFF",
+                      onChanged: (bool value) async {
+                        final String deviceName =
+                            _mySmartDevices[index]["name"] ?? "";
 
-                  // Call the API to switch the device
-                  final bool success = await _switchDevice(deviceName, value);
+                        // Call the API to switch the device
+                        final bool success = await _switchDevice(
+                          deviceName,
+                          value,
+                        );
 
-                  if (success) {
-                    // Update the local state only if the API call succeeded
-                    setState(() {
-                      _mySmartDevices[index]["powerStatus"] = value
-                          ? "ON"
-                          : "OFF";
-                    });
-                    print(
-                      "Successfully switched $deviceName to ${value ? 'ON' : 'OFF'}",
+                        try {
+                          print("API call success: $success");
+                          // Update the local state only if the API call succeeded
+                          setState(() {
+                            _mySmartDevices[index]["powerStatus"] = success
+                                ? "ON"
+                                : "OFF";
+                          });
+                          print(
+                            "Successfully switched $deviceName to ${value ? 'ON' : 'OFF'}",
+                          );
+                        } catch (e) {
+                          print("Failed to switch $deviceName");
+                          // Optionally, show a snackbar or dialog to the user
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  "The device is on switch off: $deviceName",
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
                     );
-                  } else {
-                    print("Failed to switch $deviceName");
-                    // Optionally, show a snackbar or dialog to the user
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text("Failed to switch $deviceName")),
-                      );
-                    }
-                  }
-                },
-              );
-            },
-          ),
-        ),
+                  },
+                ),
+              ),
       ],
     );
   }

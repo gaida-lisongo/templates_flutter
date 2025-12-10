@@ -1,5 +1,5 @@
 
-name: Flutter Build & Deploy to APK
+name: Flutter Build UI/Smart-home & Deploy to APK
 
 # Déclenche ce workflow à chaque 'push' sur la branche 'main'
 on:
